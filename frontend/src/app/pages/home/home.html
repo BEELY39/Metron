@@ -1,0 +1,45 @@
+<div
+  class="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex flex-col items-center justify-center"
+>
+  <div class="text-center">
+    <h1 class="text-5xl font-bold text-white mb-4">Metron</h1>
+    <p class="text-xl text-white/80 mb-12">Factur-X Invoice Generator</p>
+
+    <!-- Zone dynamique -->
+    @if (isloggedIn && user) {
+      <div class="animate-fade-in-up">
+        <h2 class="text-3xl font-bold text-white mb-6">Bonjour {{ user.fullName }} !</h2>
+
+        <div class="flex gap-4 justify-center">
+          <button
+            (click)="logout()"
+            class="px-8 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg transition-all cursor-pointer"
+          >
+            Se déconnecter
+          </button>
+
+          <button
+            class="px-8 py-3 bg-white text-indigo-600 font-bold rounded-lg hover:scale-105 transition-all cursor-pointer"
+          >
+            Aller au Dashboard
+          </button>
+        </div>
+      </div>
+    } @else {
+      <div class="flex gap-4 justify-center">
+        <a
+          routerLink="/register"
+          class="px-10 py-4 text-lg font-bold text-indigo-600 bg-white rounded-lg shadow-xl hover:bg-gray-100 hover:scale-105 transition-all duration-200"
+        >
+          Register
+        </a>
+        <a
+          routerLink="/login"
+          class="px-10 py-4 text-lg font-bold text-white border-2 border-white rounded-lg hover:bg-white/10 hover:scale-105 transition-all duration-200"
+        >
+          Login
+        </a>
+      </div>
+    }
+  </div>
+</div>

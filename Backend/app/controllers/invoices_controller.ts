@@ -13,7 +13,7 @@ export default class InvoicesController {
       // 2. Récupérer le fichier PDF uploadé
       const pdfFile = request.file('pdf', {
         extnames: ['pdf'],
-        size: '10mb',
+        size: '5mb',
       })
 
       if (!pdfFile) {
@@ -24,15 +24,22 @@ export default class InvoicesController {
       // 3. Lire le contenu du fichier PDF
       const pdfBuffer = await readFile(pdfFile.tmpPath!)
 
-      // 4. Générer le XML Factur-X
+      // 4. Vérifier le magic number du PDF (%PDF-)
+      const pdfMagic = pdfBuffer.subarray(0, 5).toString('ascii')
+      if (pdfMagic !== '%PDF-') {
+        response.status(400).send({ error: 'Le fichier n\'est pas un PDF valide' })
+        return
+      }
+
+      // 5. Générer le XML Factur-X
       const xmlGeneratorService = new XmlGeneratorService()
       const xml = await xmlGeneratorService.generateXml(invoiceData)
 
-      // 5. Embarquer le XML dans le PDF (ordre: pdfBuffer, xml)
+      // 6. Embarquer le XML dans le PDF
       const pdfEmbedderService = new PdfEmbedderService()
       const pdfFacturX = await pdfEmbedderService.embedXmlInPdf(pdfBuffer, xml)
 
-      // 6. Retourner le PDF Factur-X
+      // 7. Retourner le PDF Factur-X
       response
         .header('Content-Type', 'application/pdf')
         .header('Content-Disposition', 'attachment; filename="facture-facturx.pdf"')

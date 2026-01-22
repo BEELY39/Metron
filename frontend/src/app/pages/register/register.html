@@ -1,0 +1,101 @@
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        Créer un compte
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600">
+        Ou
+        <a routerLink="/login" class="font-medium text-indigo-600 hover:text-indigo-500">
+          connectez-vous à votre compte
+        </a>
+      </p>
+    </div>
+
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
+      <div class="space-y-4">
+        <!-- Nom complet -->
+        <div>
+          <label for="fullName" class="block text-sm font-medium text-gray-700">
+            Nom complet
+          </label>
+          <input
+            id="fullName"
+            type="text"
+            formControlName="fullName"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            [class.border-red-500]="registerForm.get('fullName')?.invalid && registerForm.get('fullName')?.touched"
+            placeholder="Jean Dupont"
+          />
+          @if (registerForm.get('fullName')?.invalid && registerForm.get('fullName')?.touched) {
+            <p class="mt-1 text-sm text-red-600">
+              @if (registerForm.get('fullName')?.errors?.['required']) {
+                Le nom est requis
+              } @else if (registerForm.get('fullName')?.errors?.['minlength']) {
+                Le nom doit contenir au moins 2 caractères
+              }
+            </p>
+          }
+        </div>
+
+        <!-- Email -->
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700">
+            Adresse email
+          </label>
+          <input
+            id="email"
+            type="email"
+            formControlName="email"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            [class.border-red-500]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched"
+            placeholder="vous@exemple.com"
+          />
+          @if (registerForm.get('email')?.invalid && registerForm.get('email')?.touched) {
+            <p class="mt-1 text-sm text-red-600">
+              @if (registerForm.get('email')?.errors?.['required']) {
+                L'email est requis
+              } @else if (registerForm.get('email')?.errors?.['email']) {
+                Veuillez entrer un email valide
+              }
+            </p>
+          }
+        </div>
+
+        <!-- Mot de passe -->
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700">
+            Mot de passe
+          </label>
+          <input
+            id="password"
+            type="password"
+            formControlName="password"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            [class.border-red-500]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched"
+            placeholder="Minimum 8 caractères"
+          />
+          @if (registerForm.get('password')?.invalid && registerForm.get('password')?.touched) {
+            <p class="mt-1 text-sm text-red-600">
+              @if (registerForm.get('password')?.errors?.['required']) {
+                Le mot de passe est requis
+              } @else if (registerForm.get('password')?.errors?.['minlength']) {
+                Le mot de passe doit contenir au moins 8 caractères
+              }
+            </p>
+          }
+        </div>
+      </div>
+
+      <div>
+        <button
+          type="submit"
+          [disabled]="registerForm.invalid"
+          class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors"
+        >
+          Créer mon compte
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
