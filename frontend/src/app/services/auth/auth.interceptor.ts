@@ -9,6 +9,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
 
+  // Si X-API-Key est présent, ne pas ajouter Authorization (pour les routes API key)
+  if (req.headers.has('X-API-Key')) {
+    return next(req.clone({ withCredentials: true }));
+  }
+
   const token = localStorage.getItem('auth_token');
 
   if (token) {
