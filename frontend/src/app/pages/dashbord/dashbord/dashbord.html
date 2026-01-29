@@ -1,0 +1,536 @@
+<div class="dashboard-container">
+  <!-- Header avec gestion API Key -->
+  <header class="dashboard-header">
+    <div class="api-key-section">
+      <h2>Clé API</h2>
+
+      <!-- Loading -->
+      @if (isLoading()) {
+        <div class="loading">
+          <span class="spinner"></span>
+          <span>Chargement...</span>
+        </div>
+      }
+
+      <!-- Si pas de clé -->
+      @if (!isLoading() && !apiKeyResponse()?.hasKey) {
+        <p class="info-text">Vous n'avez pas encore de clé API. Générez-en une pour commencer.</p>
+        <button class="btn btn-primary" (click)="onGenerateKey()">
+          Générer ma clé API
+        </button>
+      }
+
+      <!-- Si clé vient d'être générée (affichage unique) -->
+      @if (apiKey()) {
+        <div class="api-key-display">
+          <p class="warning-text">Copiez cette clé maintenant ! Elle ne sera plus visible après.</p>
+          <div class="key-box">
+            <code>{{ apiKey() }}</code>
+            <button class="btn btn-copy" (click)="copyToClipboard()">Copier</button>
+          </div>
+          <div class="key-actions">
+            <button class="btn btn-danger" (click)="onRevokeKey()">Révoquer la clé</button>
+          </div>
+        </div>
+      }
+
+      <!-- Si clé existe déjà -->
+      @if (!isLoading() && apiKeyResponse()?.hasKey && !apiKey()) {
+        <div class="api-key-info">
+          <p class="success-text">Vous avez une clé API active.</p>
+          <p class="key-prefix">Préfixe : <code>{{ apiKeyResponse()?.apiKey?.keyPrefix }}...</code></p>
+          <div class="key-actions">
+            <button class="btn btn-danger" (click)="onRevokeKey()">Révoquer la clé</button>
+          </div>
+        </div>
+      }
+    </div>
+  </header>
+
+  <!-- Documentation -->
+  <main class="documentation">
+    <section class="doc-section">
+      <h1>Documentation API Metron</h1>
+      <p class="intro">Bienvenue {{ user?.fullName }}. Utilisez votre clé API pour générer des factures Factur-X conformes.</p>
+    </section>
+
+    <section class="doc-section">
+      <h2>Authentification</h2>
+      <p>Toutes les requêtes doivent inclure votre clé API dans le header :</p>
+      <pre><code>X-API-Key: votre_cle_api</code></pre>
+    </section>
+
+    <section class="doc-section">
+      <h2>Endpoint : Générer une facture</h2>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/invoices/facturx</code>
+      </div>
+
+      <h3>Paramètres requis</h3>
+      <table class="params-table">
+        <thead>
+          <tr>
+            <th>Paramètre</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>pdf</td><td>File</td><td>Fichier PDF de la facture</td></tr>
+          <tr><td>invoiceNumber</td><td>string</td><td>Numéro de facture</td></tr>
+          <tr><td>invoiceDate</td><td>string</td><td>Date (YYYY-MM-DD)</td></tr>
+          <tr><td>sellerName</td><td>string</td><td>Nom du vendeur</td></tr>
+          <tr><td>sellerSiret</td><td>string</td><td>SIRET du vendeur</td></tr>
+          <tr><td>buyerName</td><td>string</td><td>Nom de l'acheteur</td></tr>
+          <tr><td>currencyCode</td><td>string</td><td>Code devise (EUR)</td></tr>
+          <tr><td>totalHT</td><td>string</td><td>Total HT</td></tr>
+          <tr><td>totalTVA</td><td>string</td><td>Total TVA</td></tr>
+          <tr><td>totalTTC</td><td>string</td><td>Total TTC</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X POST https://api.metron.fr/api/invoices/facturx \
+  -H "X-API-Key: votre_cle_api" \
+  -F "pdf=&#64;facture.pdf" \
+  -F "invoiceNumber=FAC-2024-001" \
+  -F "invoiceDate=2024-01-15" \
+  -F "sellerName=Ma Société" \
+  -F "sellerSiret=12345678901234" \
+  -F "buyerName=Client SA" \
+  -F "currencyCode=EUR" \
+  -F "totalHT=1000.00" \
+  -F "totalTVA=200.00" \
+  -F "totalTTC=1200.00"</code></pre>
+    </section>
+
+    <section class="doc-section">
+      <h2>Réponse</h2>
+      <p>En cas de succès, l'API retourne le fichier PDF enrichi avec les métadonnées Factur-X (Content-Type: application/pdf).</p>
+    </section>
+
+    <!-- BATCH PROCESSING -->
+    <section class="doc-section">
+      <h2>Traitement par lot (Batch) - Plan Pro</h2>
+      <p class="pro-badge">Jusqu'à 10 000 factures par batch</p>
+      <p>Pour traiter un grand volume de factures, utilisez l'API batch. Envoyez un fichier ZIP contenant vos PDFs et un fichier CSV avec les métadonnées.</p>
+    </section>
+
+    <section class="doc-section">
+      <h2>Étape 1 : Soumettre un batch</h2>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/invoices/batch</code>
+      </div>
+
+      <h3>Format du ZIP</h3>
+      <p>Votre fichier ZIP doit contenir :</p>
+      <ul class="file-list">
+        <li><code>metadata.csv</code> - Fichier CSV avec les données de chaque facture</li>
+        <li><code>*.pdf</code> - Tous vos fichiers PDF (nommés selon la colonne <code>pdf_filename</code> du CSV)</li>
+      </ul>
+
+      <h3>Format du CSV (metadata.csv)</h3>
+      <table class="params-table">
+        <thead>
+          <tr>
+            <th>Colonne</th>
+            <th>Requis</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>pdf_filename</td><td>Oui</td><td>Nom du fichier PDF dans le ZIP</td></tr>
+          <tr><td>invoice_number</td><td>Oui</td><td>Numéro de facture</td></tr>
+          <tr><td>invoice_date</td><td>Oui</td><td>Date (YYYY-MM-DD)</td></tr>
+          <tr><td>seller_name</td><td>Oui</td><td>Nom du vendeur</td></tr>
+          <tr><td>seller_siret</td><td>Oui</td><td>SIRET du vendeur</td></tr>
+          <tr><td>buyer_name</td><td>Oui</td><td>Nom de l'acheteur</td></tr>
+          <tr><td>currency_code</td><td>Oui</td><td>Code devise (EUR)</td></tr>
+          <tr><td>total_ht</td><td>Oui</td><td>Total HT</td></tr>
+          <tr><td>total_tva</td><td>Oui</td><td>Total TVA</td></tr>
+          <tr><td>total_ttc</td><td>Oui</td><td>Total TTC</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Exemple de CSV</h3>
+      <pre><code>pdf_filename,invoice_number,invoice_date,seller_name,seller_siret,buyer_name,currency_code,total_ht,total_tva,total_ttc
+facture1.pdf,FAC-001,2024-01-15,Ma Société,12345678901234,Client A,EUR,1000.00,200.00,1200.00
+facture2.pdf,FAC-002,2024-01-16,Ma Société,12345678901234,Client B,EUR,2500.00,500.00,3000.00</code></pre>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X POST https://api.metron.fr/api/invoices/batch \
+  -H "X-API-Key: votre_cle_api" \
+  -F "file=&#64;factures.zip"</code></pre>
+
+      <h3>Réponse</h3>
+      <pre><code>&#123;
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "totalInvoices": 150,
+  "message": "Batch soumis avec succès"
+&#125;</code></pre>
+    </section>
+
+    <section class="doc-section">
+      <h2>Étape 2 : Vérifier le statut</h2>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <code>/api/invoices/batch/:jobId</code>
+      </div>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X GET https://api.metron.fr/api/invoices/batch/550e8400-e29b-41d4-a716-446655440000 \
+  -H "X-API-Key: votre_cle_api"</code></pre>
+
+      <h3>Réponse</h3>
+      <pre><code>&#123;
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "progress": 45,
+  "processedInvoices": 68,
+  "totalInvoices": 150,
+  "failedInvoices": 2
+&#125;</code></pre>
+
+      <h3>Statuts possibles</h3>
+      <table class="params-table">
+        <tbody>
+          <tr><td>pending</td><td></td><td>En attente de traitement</td></tr>
+          <tr><td>processing</td><td></td><td>Traitement en cours</td></tr>
+          <tr><td>completed</td><td></td><td>Terminé - prêt à télécharger</td></tr>
+          <tr><td>failed</td><td></td><td>Échec du traitement</td></tr>
+          <tr><td>cancelled</td><td></td><td>Annulé par l'utilisateur</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="doc-section">
+      <h2>Étape 3 : Télécharger le résultat</h2>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <code>/api/invoices/batch/:jobId/download</code>
+      </div>
+      <p>Une fois le statut à <code>completed</code>, téléchargez le ZIP contenant toutes vos factures Factur-X.</p>
+      <p class="warning-text">Le lien de téléchargement expire après 24 heures.</p>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X GET https://api.metron.fr/api/invoices/batch/550e8400-e29b-41d4-a716-446655440000/download \
+  -H "X-API-Key: votre_cle_api" \
+  -o resultat.zip</code></pre>
+    </section>
+
+    <section class="doc-section">
+      <h2>Annuler un batch</h2>
+      <div class="endpoint">
+        <span class="method method-delete">DELETE</span>
+        <code>/api/invoices/batch/:jobId</code>
+      </div>
+      <p>Annule un batch en cours de traitement.</p>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X DELETE https://api.metron.fr/api/invoices/batch/550e8400-e29b-41d4-a716-446655440000 \
+  -H "X-API-Key: votre_cle_api"</code></pre>
+    </section>
+
+    <section class="doc-section">
+      <h2>Lister mes batchs</h2>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <code>/api/invoices/batch</code>
+      </div>
+      <p>Récupère la liste de tous vos batchs avec pagination.</p>
+
+      <h3>Paramètres de requête</h3>
+      <table class="params-table">
+        <tbody>
+          <tr><td>page</td><td>number</td><td>Numéro de page (défaut: 1)</td></tr>
+          <tr><td>limit</td><td>number</td><td>Résultats par page (défaut: 20, max: 100)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Exemple cURL</h3>
+      <pre><code>curl -X GET "https://api.metron.fr/api/invoices/batch?page=1&limit=10" \
+  -H "X-API-Key: votre_cle_api"</code></pre>
+    </section>
+  </main>
+</div>
+
+<style>
+  .dashboard-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .dashboard-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    color: white;
+  }
+
+  .api-key-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.5rem;
+  }
+
+  .info-text {
+    color: #a0a0a0;
+    margin-bottom: 1rem;
+  }
+
+  .warning-text {
+    color: #ffc107;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .success-text {
+    color: #4caf50;
+    margin-bottom: 0.5rem;
+  }
+
+  .key-box {
+    background: #0d0d1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 1rem;
+    word-break: break-all;
+  }
+
+  .key-box code, .key-prefix code {
+    color: #00d9ff;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: #6366f1;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #4f46e5;
+  }
+
+  .btn-copy {
+    background: #10b981;
+    color: white;
+    margin-left: 1rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .btn-copy:hover {
+    background: #059669;
+  }
+
+  .btn-danger {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: #dc2626;
+  }
+
+  .key-actions {
+    margin-top: 1rem;
+  }
+
+  .key-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #a0a0a0;
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #333;
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .documentation {
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 2rem;
+  }
+
+  .doc-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #eee;
+  }
+
+  .doc-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .doc-section h1 {
+    font-size: 2rem;
+    color: #1a1a2e;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .doc-section h2 {
+    font-size: 1.4rem;
+    color: #333;
+    margin: 0 0 1rem 0;
+  }
+
+  .doc-section h3 {
+    font-size: 1.1rem;
+    color: #555;
+    margin: 1.5rem 0 0.75rem 0;
+  }
+
+  .intro {
+    color: #666;
+    font-size: 1.1rem;
+  }
+
+  .endpoint {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: #1a1a2e;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+
+  .method {
+    background: #4caf50;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .endpoint code {
+    color: #00d9ff;
+    font-size: 1rem;
+  }
+
+  pre {
+    background: #1a1a2e;
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  pre code {
+    color: #e0e0e0;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .params-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+
+  .params-table th, .params-table td {
+    text-align: left;
+    padding: 0.75rem;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .params-table th {
+    background: #f0f0f0;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .params-table td:first-child {
+    font-family: 'Fira Code', monospace;
+    color: #6366f1;
+  }
+
+  .params-table td:nth-child(2) {
+    color: #888;
+    font-size: 0.9rem;
+  }
+
+  .pro-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+  }
+
+  .file-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+  }
+
+  .file-list li {
+    padding: 0.5rem 0;
+    padding-left: 1.5rem;
+    position: relative;
+  }
+
+  .file-list li::before {
+    content: "📄";
+    position: absolute;
+    left: 0;
+  }
+
+  .file-list code {
+    background: #e0e0e0;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .method-get {
+    background: #2196f3;
+  }
+
+  .method-delete {
+    background: #ef4444;
+  }
+
+  .doc-section ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .doc-section li {
+    margin: 0.25rem 0;
+  }
+</style>

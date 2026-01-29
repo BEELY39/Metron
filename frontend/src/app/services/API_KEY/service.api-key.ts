@@ -1,13 +1,13 @@
 import { Injectable, inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { environment } from '../../../environments/environment.development';
 import { Observable, of } from 'rxjs';
+import { environment } from '../../../environments/environment.development';
 
 @Injectable({
   providedIn: 'root',
 })
-export class InvoiceService {
+export class ApiKeyService {
   private http = inject(HttpClient);
   private platformId = inject(PLATFORM_ID);
   private readonly API_URL = environment.api;
@@ -19,29 +19,48 @@ export class InvoiceService {
     return localStorage.getItem('auth_token');
   }
 
-  createApiKey(name: string): Observable<any> {
+  private getAuthHeaders(): HttpHeaders | null {
     const token = this.getToken();
-    if (!token) {
-      return of({ error: 'Non authentifié' });
-    }
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
-    return this.http.post(`${this.API_URL}/api-keys`, { name }, { headers });
+    if (!token) return null;
+    return new HttpHeaders().set('Authorization', `Bearer ${token}`);
   }
 
-  listApiKeys(): Observable<any> {
-    const token = this.getToken();
-    if (!token) {
-      return of({ error: 'Non authentifié' });
-    }
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
-    return this.http.get(`${this.API_URL}/api-keys`, { headers });
+  /**
+   * Récupère la clé API de l'utilisateur (une seule par compte)
+   */
+  getMyApiKey(): Observable<ApiKeyResponse> {
+    const headers = this.getAuthHeaders();
+    if (!headers) return of({ error: 'Non authentifié' } as any);
+    return this.http.get<ApiKeyResponse>(`${this.API_URL}/api-keys/me`, { headers });
   }
 
+  /**
+   * Génère une clé API (une seule autorisée par compte)
+   * Si une clé existe déjà, retourne une erreur
+   */
+  generateApiKey(): Observable<ApiKeyCreateResponse> {
+    const headers = this.getAuthHeaders();
+    if (!headers) return of({ error: 'Non authentifié' } as any);
+    return this.http.post<ApiKeyCreateResponse>(`${this.API_URL}/api-keys/generate`, {}, { headers });
+  }
+
+  /**
+   * Révoque la clé API existante
+   */
+  revokeApiKey(): Observable<any> {
+    const headers = this.getAuthHeaders();
+    if (!headers) return of({ error: 'Non authentifié' });
+    return this.http.delete(`${this.API_URL}/api-keys/revoke`, { headers });
+  }
+
+  /**
+   * Génère une facture Factur-X
+   */
   generateFacturX(file: File, invoiceData: InvoiceData, apiKey: string): Observable<Blob> {
     const formData = new FormData();
     formData.append('pdf', file);
 
-    // Ajouter les champs simples
+    // Champs obligatoires
     formData.append('invoiceNumber', invoiceData.invoiceNumber);
     formData.append('invoiceDate', invoiceData.invoiceDate);
     formData.append('sellerName', invoiceData.sellerName);
@@ -52,7 +71,7 @@ export class InvoiceService {
     formData.append('totalTVA', invoiceData.totalTVA);
     formData.append('totalTTC', invoiceData.totalTTC);
 
-    // Champs optionnels simples
+    // Champs optionnels
     if (invoiceData.invoiceTypeCode) formData.append('invoiceTypeCode', invoiceData.invoiceTypeCode);
     if (invoiceData.sellerVatNumber) formData.append('sellerVatNumber', invoiceData.sellerVatNumber);
     if (invoiceData.buyerSiret) formData.append('buyerSiret', invoiceData.buyerSiret);
@@ -61,7 +80,7 @@ export class InvoiceService {
     if (invoiceData.paymentDueDate) formData.append('paymentDueDate', invoiceData.paymentDueDate);
     if (invoiceData.purchaseOrderReference) formData.append('purchaseOrderReference', invoiceData.purchaseOrderReference);
 
-    // Adresses - format clé[sous-clé] pour multipart
+    // Adresses
     if (invoiceData.sellerAddress) {
       if (invoiceData.sellerAddress.street) formData.append('sellerAddress[street]', invoiceData.sellerAddress.street);
       if (invoiceData.sellerAddress.zipCode) formData.append('sellerAddress[zipCode]', invoiceData.sellerAddress.zipCode);
@@ -76,7 +95,7 @@ export class InvoiceService {
       formData.append('buyerAddress[countryCode]', invoiceData.buyerAddress.countryCode);
     }
 
-    // Lignes de facture (si présentes)
+    // Lignes de facture
     if (invoiceData.lines && invoiceData.lines.length > 0) {
       invoiceData.lines.forEach((line, index) => {
         formData.append(`lines[${index}][description]`, line.description);
@@ -94,6 +113,29 @@ export class InvoiceService {
       responseType: 'blob'
     });
   }
+}
+
+// Interfaces
+export interface ApiKey {
+  id: number;
+  keyPrefix: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export interface ApiKeyResponse {
+  apiKey: ApiKey | null;
+  hasKey: boolean;
+}
+
+export interface ApiKeyCreateResponse {
+  apiKey: {
+    key: string; // Clé complète (visible une seule fois)
+    keyPrefix: string;
+  };
+  message: string;
 }
 
 export interface Address {
