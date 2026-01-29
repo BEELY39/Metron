@@ -44,4 +44,6 @@ router.use([
 export const middleware = router.named({
   apiKeyAuth: () => import('#middleware/api_key_auth_middleware'),
   auth: () => import('#middleware/auth_middleware'),
+  quotaCheck: () => import('#middleware/quota_check_middleware'),
+  rateLimit: () => import('#middleware/rate_limit_middleware'),
 })

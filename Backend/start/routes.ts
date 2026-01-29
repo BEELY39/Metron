@@ -8,46 +8,20 @@
 */
 
 import router from '@adonisjs/core/services/router'
-import { XmlGeneratorService } from '#services/xml_generator_service'
 import { middleware } from './kernel.js'
+import { rateLimitConfig } from '#middleware/rate_limit_middleware'
 
 const InvoicesController = () => import('#controllers/invoices_controller')
+const BatchInvoicesController = () => import('#controllers/batch_invoices_controller')
 const AuthController = () => import('#controllers/auth_controller')
+const PaymentsController = () => import('#controllers/payments_controller')
 
 router.get('/', async () => {
   return {
-    hello: 'world',
+    name: 'Metron API',
+    version: '1.0.0',
+    status: 'healthy',
   }
-})
-
-router.get('/generate-xml', async () => {
-  const xmlGeneratorService = new XmlGeneratorService()
-  const xml = await xmlGeneratorService.generateXml({
-    invoiceNumber: 'F-2024-001',
-    invoiceDate: '2024-01-15',
-    sellerName: 'Ma Société SARL',
-    sellerSiret: '12345678901234',
-    sellerVatNumber: 'FR12345678901',
-    sellerAddress: {
-      street: '10 Rue de la Paix',
-      zipCode: '75001',
-      city: 'Paris',
-      countryCode: 'FR',
-    },
-    buyerName: 'Client Entreprise SA',
-    buyerSiret: '98765432109876',
-    buyerAddress: {
-      street: '25 Avenue des Champs',
-      zipCode: '69001',
-      city: 'Lyon',
-      countryCode: 'FR',
-    },
-    currencyCode: 'EUR',
-    totalHT: '1000.00',
-    totalTVA: '200.00',
-    totalTTC: '1200.00',
-  })
-  return xml
 })
 
 // ============================================
@@ -61,12 +35,46 @@ router
   .prefix('/api/auth')
 
 // ============================================
-// Routes protégées par clé API
+// Routes protégées par clé API - Facture unitaire
 // ============================================
 router
   .group(() => {
-    // Génération de PDF Factur-X (requiert une clé API valide)
     router.post('/invoices/facturx', [InvoicesController, 'generate'])
+  })
+  .prefix('/api')
+  .use([
+    middleware.apiKeyAuth(),
+    middleware.rateLimit(rateLimitConfig.single()),
+    middleware.quotaCheck({ type: 'single' }),
+  ])
+
+// ============================================
+// Routes protégées par clé API - Batch (Plan Pro)
+// ============================================
+router
+  .group(() => {
+    // Soumettre un nouveau batch
+    router.post('/invoices/batch', [BatchInvoicesController, 'submit'])
+      .use([
+        middleware.rateLimit(rateLimitConfig.batchSubmit()),
+        middleware.quotaCheck({ type: 'batch' }),
+      ])
+
+    // Lister les batchs de l'utilisateur
+    router.get('/invoices/batch', [BatchInvoicesController, 'list'])
+      .use(middleware.rateLimit(rateLimitConfig.batchStatus()))
+
+    // Obtenir le statut d'un batch
+    router.get('/invoices/batch/:jobId', [BatchInvoicesController, 'status'])
+      .use(middleware.rateLimit(rateLimitConfig.batchStatus()))
+
+    // Télécharger le résultat
+    router.get('/invoices/batch/:jobId/download', [BatchInvoicesController, 'download'])
+      .use(middleware.rateLimit(rateLimitConfig.download()))
+
+    // Annuler un batch
+    router.delete('/invoices/batch/:jobId', [BatchInvoicesController, 'cancel'])
+      .use(middleware.rateLimit(rateLimitConfig.batchSubmit()))
   })
   .prefix('/api')
   .use(middleware.apiKeyAuth())
@@ -79,10 +87,27 @@ router
     // Profil utilisateur
     router.get('/me', [AuthController, 'me'])
     router.post('/logout', [AuthController, 'logout'])
-    // Gestion des clés API
-    router.post('/api-keys', [AuthController, 'createApiKey'])
-    router.get('/api-keys', [AuthController, 'listApiKeys'])
-    router.delete('/api-keys/:id', [AuthController, 'revokeApiKey'])
+    // Gestion de la clé API (une seule par utilisateur)
+    router.get('/api-keys/me', [AuthController, 'getMyApiKey'])
+    router.post('/api-keys/generate', [AuthController, 'generateApiKey'])
+    router.delete('/api-keys/revoke', [AuthController, 'revokeApiKey'])
   })
   .prefix('/api/auth')
+  .use(middleware.auth())
+
+// ============================================
+// Routes de paiement Stripe
+// ============================================
+
+// Webhook Stripe (sans authentification, vérifié par signature)
+router.post('/api/payments/webhook', [PaymentsController, 'webhook'])
+
+// Routes protégées par token utilisateur
+router
+  .group(() => {
+    router.post('/checkout', [PaymentsController, 'createCheckout'])
+    router.post('/portal', [PaymentsController, 'createPortal'])
+    router.get('/subscription', [PaymentsController, 'getSubscription'])
+  })
+  .prefix('/api/payments')
   .use(middleware.auth())

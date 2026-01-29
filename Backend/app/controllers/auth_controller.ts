@@ -1,7 +1,7 @@
 import User from '#models/user'
 import ApiKey from '#models/api_key'
 import hash from '@adonisjs/core/services/hash'
-import { registerValidator, loginValidator, createApiKeyValidator } from '#validators/auth'
+import { registerValidator, loginValidator } from '#validators/auth'
 import { HttpContext } from '@adonisjs/core/http'
 
 export default class AuthController {
@@ -93,39 +93,65 @@ export default class AuthController {
   }
 
   /**
-   * Créer une clé API pour l'utilisateur connecté
-   * POST /api/auth/api-keys
+   * Récupérer la clé API de l'utilisateur (une seule par compte)
+   * GET /api/auth/api-keys/me
    */
-  async createApiKey(ctx: HttpContext) {
-    // 1. L'utilisateur est déjà authentifié via le middleware
+  async getMyApiKey(ctx: HttpContext) {
     const user = ctx.auth.user!
 
-    // 2. Valider les données
-    const { name } = await ctx.request.validateUsing(createApiKeyValidator)
+    const apiKey = await ApiKey.query()
+      .where('userId', user.id)
+      .where('isActive', true)
+      .select(['id', 'name', 'keyPrefix', 'isActive', 'lastUsedAt', 'createdAt'])
+      .first()
 
-    // 3. Générer la clé API
+    return ctx.response.send({
+      hasKey: !!apiKey,
+      apiKey: apiKey || null,
+    })
+  }
+
+  /**
+   * Générer une clé API (une seule autorisée par compte)
+   * POST /api/auth/api-keys/generate
+   */
+  async generateApiKey(ctx: HttpContext) {
+    const user = ctx.auth.user!
+
+    // Vérifier si l'utilisateur a déjà une clé active
+    const existingKey = await ApiKey.query()
+      .where('userId', user.id)
+      .where('isActive', true)
+      .first()
+
+    if (existingKey) {
+      return ctx.response.status(409).send({
+        error: 'Vous avez déjà une clé API active',
+        message: 'Révoquez votre clé existante avant d\'en créer une nouvelle',
+      })
+    }
+
+    // Générer la clé API
     const { fullKey, prefix } = ApiKey.generateKey()
 
-    // 4. Hasher la clé avant de la stocker
+    // Hasher la clé avant de la stocker
     const hashedKey = await hash.make(fullKey)
 
-    // 5. Créer l'entrée en base
+    // Créer l'entrée en base
     const apiKey = await ApiKey.create({
       userId: user.id,
-      name,
+      name: 'Ma clé API',
       key: hashedKey,
       keyPrefix: prefix,
       isActive: true,
     })
 
-    // 6. Retourner la clé (ATTENTION: c'est la seule fois qu'on la montre en clair!)
     return ctx.response.status(201).send({
       message: 'Clé API créée avec succès',
       apiKey: {
         id: apiKey.id,
-        name: apiKey.name,
-        key: fullKey, // Montré une seule fois!
-        prefix: prefix,
+        key: fullKey, // Visible une seule fois !
+        keyPrefix: prefix,
         createdAt: apiKey.createdAt,
       },
       warning: 'Conservez cette clé en lieu sûr. Elle ne sera plus affichée.',
@@ -133,33 +159,19 @@ export default class AuthController {
   }
 
   /**
-   * Lister les clés API de l'utilisateur connecté
-   * GET /api/auth/api-keys
-   */
-  async listApiKeys(ctx: HttpContext) {
-    const user = ctx.auth.user!
-
-    const apiKeys = await ApiKey.query()
-      .where('userId', user.id)
-      .select(['id', 'name', 'keyPrefix', 'isActive', 'lastUsedAt', 'createdAt'])
-
-    return ctx.response.send({ apiKeys })
-  }
-
-  /**
-   * Révoquer une clé API
-   * DELETE /api/auth/api-keys/:id
+   * Révoquer la clé API de l'utilisateur
+   * DELETE /api/auth/api-keys/revoke
    */
   async revokeApiKey(ctx: HttpContext) {
     const user = ctx.auth.user!
 
     const apiKey = await ApiKey.query()
-      .where('id', ctx.params.id)
       .where('userId', user.id)
+      .where('isActive', true)
       .first()
 
     if (!apiKey) {
-      return ctx.response.status(404).send({ error: 'Clé API non trouvée' })
+      return ctx.response.status(404).send({ error: 'Aucune clé API active' })
     }
 
     apiKey.isActive = false
