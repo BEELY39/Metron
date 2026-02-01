@@ -39,4 +39,11 @@ export default await Env.create(new URL('../', import.meta.url), {
   STRIPE_WEBHOOK_SECRET: Env.schema.string(),
   STRIPE_PRO_PRICE_ID: Env.schema.string(),
   FRONTEND_URL: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | CORS Configuration
+  |----------------------------------------------------------
+  */
+  CORS_ORIGINS: Env.schema.string.optional(),
 })
