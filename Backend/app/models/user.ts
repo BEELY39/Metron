@@ -4,6 +4,7 @@ import { compose } from '@adonisjs/core/helpers'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
+import db from '@adonisjs/lucid/services/db'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import ApiKey from './api_key.js'
 
@@ -147,18 +148,38 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   /**
    * Déduit le coût des factures du crédit ou incrémente le compteur
+   * 🚦 Exclusion mutuelle avec FOR UPDATE pour éviter les race conditions
+   * ⚛️ Atomicité garantie par transaction
    */
   async chargeForInvoices(count: number): Promise<void> {
-    if (this.plan === 'free' || this.hasActiveSubscription()) {
-      // Juste incrémenter le compteur
-      this.invoicesUsedThisMonth += count
-    } else {
-      // Déduire du crédit
-      const costCents = count * 10
-      this.creditBalance -= costCents
-      this.invoicesUsedThisMonth += count
-    }
-    await this.save()
+    await db.transaction(async (trx) => {
+      // 🚦 SELECT ... FOR UPDATE verrouille la ligne pendant la transaction
+      const user = await User.query({ client: trx })
+        .where('id', this.id)
+        .forUpdate()
+        .firstOrFail()
+
+      if (user.plan === 'free' || user.hasActiveSubscription()) {
+        // Juste incrémenter le compteur
+        user.invoicesUsedThisMonth += count
+      } else {
+        // Déduire du crédit
+        const costCents = count * 10
+        if (user.creditBalance < costCents) {
+          throw new Error(
+            `Crédit insuffisant. Requis: ${costCents / 100}€, Disponible: ${user.creditBalance / 100}€`
+          )
+        }
+        user.creditBalance -= costCents
+        user.invoicesUsedThisMonth += count
+      }
+
+      await user.useTransaction(trx).save()
+
+      // Synchroniser l'instance courante avec les nouvelles valeurs
+      this.creditBalance = user.creditBalance
+      this.invoicesUsedThisMonth = user.invoicesUsedThisMonth
+    })
   }
 
   /**
