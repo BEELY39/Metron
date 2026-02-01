@@ -46,3 +46,7 @@ frontend/.sass-cache/
 
 # Claude
 .claude/
+
+# Executables
+*.exe
+
