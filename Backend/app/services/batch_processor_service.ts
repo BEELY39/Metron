@@ -1,8 +1,6 @@
 import { readFile, writeFile, mkdir, rm, readdir } from 'node:fs/promises'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { createGunzip } from 'node:zlib'
 import { parse } from 'csv-parse'
 import archiver from 'archiver'
 import { Extract } from 'unzipper'
@@ -337,8 +335,6 @@ export class BatchProcessorService {
     return new Promise((resolve, reject) => {
       const output = createWriteStream(outputPath)
       const archive = archiver('zip', { zlib: { level: 9 } })
-
-      let totalSize = 0
 
       output.on('close', () => resolve(archive.pointer()))
       archive.on('error', reject)

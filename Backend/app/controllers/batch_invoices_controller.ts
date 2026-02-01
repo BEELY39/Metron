@@ -1,5 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import { writeFile, mkdir, stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'

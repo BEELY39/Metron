@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import { DateTime } from 'luxon'
 import env from '#start/env'
 import User from '#models/user'
 import ProcessedEvent from '#models/processed_event'
@@ -6,7 +7,7 @@ import db from '@adonisjs/lucid/services/db'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 
 const stripe = new Stripe(env.get('STRIPE_SECRET_KEY'), {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export class StripeService {
@@ -181,14 +182,14 @@ export class StripeService {
     user.stripeSubscriptionId = subscription.id
     user.stripePriceId = subscription.items.data[0]?.price.id || null
     user.subscriptionStatus = subscription.status
-    user.currentPeriodStart = new Date(subscription.current_period_start * 1000)
-    user.currentPeriodEnd = new Date(subscription.current_period_end * 1000)
+    user.currentPeriodStart = DateTime.fromSeconds(subscription.current_period_start)
+    user.currentPeriodEnd = DateTime.fromSeconds(subscription.current_period_end)
     user.cancelAtPeriodEnd = subscription.cancel_at_period_end
 
     // Mettre à jour le plan si abonnement actif
     if (subscription.status === 'active' || subscription.status === 'trialing') {
       user.plan = 'pro'
-      user.subscriptionEndsAt = new Date(subscription.current_period_end * 1000)
+      user.subscriptionEndsAt = DateTime.fromSeconds(subscription.current_period_end)
     }
 
     await user.useTransaction(trx).save()
