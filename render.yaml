@@ -2,6 +2,7 @@ services:
   - type: web
     name: metron-backend
     runtime: docker
+    rootDir: Backend
     dockerfilePath: ./Dockerfile
     envVars:
       - key: NODE_ENV
