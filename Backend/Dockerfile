@@ -22,6 +22,10 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+
+# Google Cloud Run uses PORT env variable
+ENV PORT=8080
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -33,6 +37,6 @@ COPY --from=builder /app/node_modules ./node_modules
 
 USER adonisjs
 
-EXPOSE 3333
+EXPOSE 8080
 
 CMD ["node", "bin/server.js"]
